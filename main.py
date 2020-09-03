@@ -2,10 +2,13 @@ import pandas as pd
 import numpy as np
 from tensorflow import keras
 from matplotlib import pyplot as plt
+import matplotlib.image as mpimg
 from sklearn.preprocessing import OneHotEncoder
 import time 
 import datetime
 import re
+import urllib
+import seaborn as sns
 
 def OneHotToDf(df, field):
   onehot_encoder = OneHotEncoder(sparse=False)
@@ -30,8 +33,17 @@ def fromDataToGoniometric(date):
   myTimestamp /= 60
   return [np.sin( 2 * np.pi * myTimestamp / minutiSettimana ), np.cos( 2 * np.pi * myTimestamp / minutiSettimana )]
 
+def spazio():
+  print("\n======================================================================\n")
+  
+df = pd.read_csv("http://hoffnung.altervista.org/streetData.csv")
+print("Suddivisione strade:")
+sns.set_style('whitegrid')
+sns.countplot(x = 'StradaID',hue="StradaID", data=df)
+plt.legend(['Porta Romana', 'Ipercoop', 'Centro'])
+plt.show()
 
-df = pd.read_csv("/content/streetData.csv")
+spazio()
 
 df = OneHotToDf(df, "StradaID")
 
@@ -46,16 +58,18 @@ df= pd.concat([df, pd.DataFrame(newCol, columns=["sin_periodo", "cos_periodo"])]
 del df["Data"]
 
 print(df.head())
+spazio()
 print(df.describe())
-
+spazio()
+print("Distribuzione periodo:")
 df.plot.scatter('cos_periodo','sin_periodo').set_aspect('equal');
+plt.show()
 
 df.sin_periodo.plot()
 df.cos_periodo.plot()
 
 feature = ["StradaID_0", "StradaID_1", "StradaID_2", "sin_periodo", "cos_periodo"]
 label = "Tempo"
-
 def buildModel(my_learning_rate):
   model = keras.models.Sequential()
   layer = keras.layers.Dense(units=1)
@@ -82,13 +96,12 @@ def fitModel(model, df, feature, label, batch_size, epochs):
 
   return trained_weight, trained_bias, epochs, rmse
 
-lr = 0.8
+lr = 1
 batch = 1
-epochs = 200
+epochs = 150
 model = buildModel(lr)
 # Side effect su model??
 tr_weight, tr_bias, epochs, rmse = fitModel(model, df, feature, label, batch, epochs)
-
 def plot_the_loss_curve(epochs, rmse):
 
   plt.figure()
@@ -99,16 +112,30 @@ def plot_the_loss_curve(epochs, rmse):
   plt.legend()
   plt.ylim([rmse.min()*0.97, rmse.max()])
   plt.show()  
-
 plot_the_loss_curve(epochs, rmse)
-
+print("Pesi stimati: {}\nBias stimato:{}".format(tr_weight, tr_bias))
 street = {
     0:"Verità-Porta Romana-Cassia",
     1:"Ipercoop-Ponte Sodo",
     2:"Centro-Ponte Sodo"
 }
-min = 99999
-date = input("Data: ")
+
+sns.set_style('white')
+
+streetImg=["http://hoffnung.altervista.org/cassia.png","http://hoffnung.altervista.org/iper.png","http://hoffnung.altervista.org/centro.png"]
+
+date = str()
+flag = True
+
+while(flag):
+  date = input("Data: ")
+  if(re.search("(\d{2})/(\d{2})/(\d{4}) (\d{2}):(\d{2})", date) == None):
+    print("Formato data errato [gg/mm/aaaa hh:mm]")
+  else:
+    flag = False
+
+out = dict()
+
 for c in range(3):
   data = [[0, 0, 0]+fromDataToGoniometric(date)]
   data[0][c] = 1
@@ -116,4 +143,13 @@ for c in range(3):
   predict = model.predict(data)[0][0]
   predictFormatted = str(datetime.timedelta(seconds=int(predict)))[-5:]
   print(data[0])
+
+  img = mpimg.imread(urllib.request.urlopen(streetImg[c]))
+  imgplot = plt.imshow(img)
+  plt.show()
+
   print(street[c]+", tempo stimato: "+predictFormatted+"\n")
+  out[predict] = street[c]
+
+keyOfBest = sorted(list(out.keys()))[0]
+print("Strada migliore: {}".format(out[keyOfBest]))
